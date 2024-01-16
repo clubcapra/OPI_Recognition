@@ -1,0 +1,5 @@
+numpy
+matplotlib
+opencv-contrib-python
+imutils
+pytesseract
