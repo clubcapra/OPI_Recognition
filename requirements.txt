@@ -3,3 +3,5 @@ matplotlib
 opencv-contrib-python
 imutils
 pytesseract
+tqdm
+colorama
