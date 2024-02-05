@@ -5,3 +5,4 @@ imutils
 pytesseract
 tqdm
 colorama
+scikit-learn

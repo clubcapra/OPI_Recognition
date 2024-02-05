@@ -11,6 +11,9 @@ import imutils
 import pytesseract
 import matplotlib.pyplot as plt
 from tqdm import tqdm
+from sklearn.linear_model import LogisticRegression
+
+from cinput import cinput, ynValidator
 
 SAMPLES_PATH = Path("samples")
 CONVERTED_PATH = Path("converted")
@@ -35,6 +38,8 @@ def convert():
         if newPath.exists():
             continue
         im = cv2.imread(str(p))
+        if im is None:
+            continue
         cv2.imwrite(str(newPath), im)
 
 class ImageData:
@@ -719,7 +724,10 @@ class RectMergePostProcess(ShapePostProcessor):
             self.debugImg(dbg)
         
         areas = minRects[:,2:4].prod(1)
-        boxes = np.array([np.int_(cv2.boxPoints(compactRect(rr))) for rr in minRects])
+        if len(minRects) != 1:
+            boxes = np.array([np.int_(cv2.boxPoints(compactRect(rr))) for rr in minRects])
+        else:
+            boxes = np.empty((1,0), np.float_)
         return valid, minRects, areas, boxes, cnts
 
 class TrapezoidFinder(ImageProcessor):
@@ -880,10 +888,9 @@ class BasicShapeIdentifier(ShapeIdentifier):
                     'noTopBottomBorders' : 0.0,
                     'bordersLighter' : 0.0,
                     'noBordersLighter' : 0.0,
-                    'ocr0' : 0.0,
-                    'ocr1' : 0.0,
-                    'ocr2' : 0.0,
-                    }
+                    'topOCR' : 0.0,
+                    'bottomOCR' : 0.0,
+                }
                 
                 # Update line values to warped resolution
                 lineWidth = max(int(h*self.lineWidth), 2)
@@ -931,10 +938,13 @@ class BasicShapeIdentifier(ShapeIdentifier):
                 
                 # If score is low, verify with OCR
                 ocrCount = 0
-                for ii, s in enumerate(split):
+                for ii, s, k in zip(range(2), split, ['topOCR', 'bottomOCR']):
                     txt = pytesseract.image_to_string(s, lang='eng',config='--psm 10 --oem 3 -c tessedit_char_whitelist=0123456789')
+                    txt:str
+                    txt.rstrip('\n')
+                    score[k] = len(txt)
                     if txt == '':
-                        break
+                        continue
                     ocrCount+=1
 
         #     # if not b.debug:
@@ -954,7 +964,6 @@ class BasicShapeIdentifier(ShapeIdentifier):
         #             break
                     # cv2.imshow(f'test{i},{orientation},{ii}', s)
                     print(f"Found [{i},{orientation},{ii}] '{txt}'")
-                score[f'ocr{ocrCount}'] = 1
                 results.append(rotated)
                 scores.append(score)
         if self.debug:
@@ -965,7 +974,40 @@ class BasicShapeIdentifier(ShapeIdentifier):
                     pass
         return scores, results
 
+class ShapeSelector(ImageProcessor):
+    def __init__(self):
+        super().__init__()
+        
+    def __call__(self, img: cv2.Mat, scores:List[Dict[str, float]], warps:List[cv2.Mat], trapezoids:np.ndarray[np.float_]) -> Tuple[List[int], List[np.ndarray[np.float_]]]:
+        """Classifies shapes
 
+        Args:
+            img (cv2.Mat): Input image, used for debugging.
+            scores (List[Dict[str, float]]): Scores per trapezoid.
+            warps (List[cv2.Mat]): Warps for each trapezoid. Shape is (n, height of n, width of n)
+            trapezoids (np.ndarray[np.float_]): Trapezoids on which data is based. Shape is (n, 4, 2)
+
+        Returns:
+            Tuple[List[int], List[np.ndarray[np.float_]]]: (indices, selected trapezoids)
+
+        """
+        
+class LogisticRegressionSelector(ShapeSelector):
+    def __call__(self, img: cv2.Mat, scores: List[Dict[str, float]], warps: List[cv2.Mat], trapezoids: np.ndarray[np.float_]) -> Tuple[List[int], List[np.ndarray[np.float_]]]:
+        if scores is None:
+            return None, None
+        # Assuming scores are normalized
+        scores_array = np.array([list(score.values()) for score in scores])
+        model = LogisticRegression()
+        model.fit(scores_array, range(len(scores)))
+
+        # Classify trapezoids
+        predictions = model.predict(scores_array)
+
+        selected_indices = list(predictions//4)
+        selected_trapezoids = trapezoids[selected_indices]
+
+        return selected_indices, selected_trapezoids
 
 class OPIFinder:
     def __init__(self):
@@ -1033,7 +1075,7 @@ class OPIFinder:
             # call (*[img, warps, rectAreas]) -> (scores, results)
             
             # input: ([img, cnts, rectAreas, trapezoids], [scores, results])
-            'selectShapes' : lambda p, args: (p, args),
+            'selectShapes' : lambda p, args: (p, (p[0], args[0], args[1], p[3])),
         }
 
     def updateChoices(self):
@@ -1044,21 +1086,26 @@ class OPIFinder:
                 except IndexError:
                     pass
 
-    def getSelectedStep(self, step:str, choices:Dict[str,str]=None):
+    def getChoices(self, choices:Union[Dict[str,str],Callable[[Dict[str,str]], Dict[str,str]]]=None):
         if choices is None:
-            choices = self.choices
-        s = self.choices[step]
+            return self.choices
+        if callable(choices):
+            return choices(self.choices.copy())
+        
+
+    def getSelectedStep(self, step:str, choices:Union[Dict[str,str],Callable[[Dict[str,str]], Dict[str,str]]]=None):
+        choices = self.getChoices(choices)
+        s = choices[step]
         if s is None:
             return None
         return self.steps[step][s]
     
-    def getStepNumber(self, step:int, choices:Dict[str,str]=None):
-        if choices is None:
-            choices = self.choices
+    def getStepNumber(self, step:int, choices:Union[Dict[str,str],Callable[[Dict[str,str]], Dict[str,str]]]=None):
+        choices = self.getChoices(choices)
         
         return self.getSelectedStep(list(choices.keys())[step])
 
-    def find(self, img:cv2.Mat, choices: Dict[str,str]=None) -> Tuple[bool, Union[np.ndarray[np.int_,np.int_],None]]:
+    def find(self, img:cv2.Mat, choices:Union[Dict[str,str],Callable[[Dict[str,str]], Dict[str,str]]]=None) -> Tuple[bool, Union[np.ndarray[np.int_,np.int_],None]]:
         self.updateChoices()
         # Normalize
         normalized = self.getSelectedStep('normalize', choices)(img)
@@ -1088,13 +1135,12 @@ class OPIFinder:
         # for s, r in zip(scores, results):
         #     cv2.imshow(f'result: {s}', r)
             
-    def find2(self, img:cv2.Mat, yields:bool = False, choices: Dict[str,str]=None, steps:int=None):
-        def yielding(img:cv2.Mat, yields:bool = False, choices: Dict[str,str]=None, steps:int=None):
+    def find2(self, img:cv2.Mat, yields:bool = False, choices:Union[Dict[str,str],Callable[[Dict[str,str]], Dict[str,str]]]=None, steps:int=None):
+        def yielding(img:cv2.Mat, yields:bool = False, choices:Union[Dict[str,str],Callable[[Dict[str,str]], Dict[str,str]]]=None, steps:int=None):
             p = tuple([None])
             args = tuple([img.copy()])
-            if choices is None:
-                self.updateChoices()
-                choices = self.choices
+            self.updateChoices()
+            choices = self.getChoices(choices)
             if steps is None:
                 steps = len(choices)
             for _, k, v in zip(range(steps), choices.keys(), choices.values()):
@@ -1178,60 +1224,72 @@ class OPIFinder:
             plt.legend()
             plt.show()
             
-    def accuracy(self, imgs: Sequence[cv2.Mat], overwrite:bool):
+    def accuracy(self, imgs: Sequence[cv2.Mat], overwrite:bool, test:bool, validity:bool):
+        def save(rScores, rExpected):
+            res = np.array([(s, e) for s, e in zip(rScores.values(), rExpected.values())])
+            np.save("cache", res)
+            
+            
+        names = [
+            'lineBorder',
+            'noLineBorder',
+            'topBottomBorders',
+            'noTopBottomBorders',
+            'bordersLighter',
+            'noBordersLighter',
+            'topOCR',
+            'bottomOCR',
+            # 'valid',
+        ]
+        
+        def load():
+            rScores = {}
+            rExpected = {}
+            ss = np.load("cache.npy")
+            for k, s, e in zip(names, ss[:,0], ss[:,1]):
+                rScores[k] = s
+                rExpected[k] = e
+            return rScores, rExpected
+        
         if overwrite:
+            
             scores = []
             warps = []
             expected = []
             
-        
-            for img in imgs:
-                _, (ss, ww) = self.find2(img)
+            for i, img in enumerate(imgs):
+                if test:
+                    _, (ss, ww) = self.find2(img)
                 if ww is None or ss is None:
                     continue
+                if 'valid' not in ss:
+                    ss['valid'] = 0
                 for s, w in zip(ss, ww):
                     scores.append(s)
                     warps.append(w)
                     exp = {}
                     cv2.imshow('accuracy', w)
-                    while True:
-                        kk = cv2.waitKey(10)
-                        if kk == KEY_ESC:
-                            exit(0)
-                        if kk == ord('y'):
-                            exp = {
-                        'lineBorder' : 1.0,
-                        'noLineBorder' : 0.0,
-                        'topBottomBorders' : 1.0,
-                        'noTopBottomBorders' : 0.0,
-                        'bordersLighter' : 1.0,
-                        'noBordersLighter' : 0.0,
-                        'ocr0' : 0.0,
-                        'ocr1' : 0.0,
-                        'ocr2' : 1.0,
-                        }
-                            break
-                        if kk == ord('n'):
-                            exp = {
-                        'lineBorder' : 0.0,
-                        'noLineBorder' : 1.0,
-                        'topBottomBorders' : 0.0,
-                        'noTopBottomBorders' : 1.0,
-                        'bordersLighter' : 0.0,
-                        'noBordersLighter' : 1.0,
-                        'ocr0' : 1.0,
-                        'ocr1' : 1.0,
-                        'ocr2' : 0.0,
-                        }
-                            break
-                    # for k in s.keys():
-                    #     print(f"Expected {k}? y/n on the image")
+                    cv2.waitKey(100)
+                    print("\n\n\n")
                     print("Result:")
                     debugScore(s)
+                    for k in s.keys():
+                        
+                        v = cinput(f"Enter expected result for {k}: ", float, 
+                                    parser=lambda x: (True, s[k]) if x == '' else (True, float(x)))
+                        exp[k] = v
+                    
+                        
+                        
+                        
+                    # while True:
+                    #     kk = cv2.waitKey(10)
+                    #     if kk == KEY_ESC:
+                    #         exit(0)
+                    # for k in s.keys():
                     print("Expected:")
                     debugScore(exp)
                     expected.append(exp)
-        
                 
             reorderedScores = {}
             reorderedExpected = {}
@@ -1242,30 +1300,33 @@ class OPIFinder:
                         reorderedExpected[k] = np.zeros((len(scores)), np.float_)
                     reorderedScores[k][i] = ss
                     reorderedExpected[k][i] = ee
+            save(reorderedScores, reorderedExpected)
+        else:
+            scores = []
+            _, reorderedExpected = load()
+            if 'valid' not in reorderedExpected:
+                reorderedExpected['valid'] = np.zeros((len(reorderedExpected[names[0]])), np.float_)
+            for i, img in enumerate(imgs):
+                _, (ss, ww) = self.find2(img)
+                if ww is None or ss is None:
+                    continue
+                
+                for s, w in zip(ss, ww):
+                    scores.append(s)
+                    if validity:
+                        cv2.imshow('valid', w)
+                        cv2.waitKey(100)
+                        v = cinput("Is this a valid image?", float)
+                        reorderedExpected['valid'][i] = v
+            reorderedScores = {}
+            for i, s in zip(range(len(scores)), scores):
+                for k, ss in zip(names, s.values()):
+                    if k not in reorderedScores.keys():
+                        reorderedScores[k] = np.zeros((len(scores)), np.float_)
+                    reorderedScores[k][i] = ss
+        if validity:
+            save(reorderedScores, reorderedExpected)
         
-        def save(rScores, rExpected):
-            res = np.array([(s, e) for s, e in zip(rScores, rExpected)])
-            np.save("cache", res)
-            
-        def load():
-            names = [
-                'lineBorder',
-                'noLineBorder',
-                'topBottomBorders',
-                'noTopBottomBorders',
-                'bordersLighter',
-                'noBordersLighter',
-                'ocr0',
-                'ocr1',
-                'ocr2',
-            ]
-            rScores = {}
-            rExpected = {}
-            ss = np.load("cache")
-            for k, s, e in zip(names, ss[:,0], ss[:,1]):
-                rScores[k] = s
-                rExpected[k] = s
-            return rScores, rExpected
         
         for k, s, e in zip(reorderedScores.keys(), reorderedScores.values(), reorderedExpected.values()):
             dbg = f"{k}:\n"
@@ -1373,14 +1434,18 @@ if __name__ == "__main__":
     redContraster = Red(SimpleNormalizer())
     
     finder.steps['scoreShapes']['simple'] = BasicShapeIdentifier(0.035, 0.04, redContraster)
+    
+    # finder.steps['selectShapes']['logistic'] = LogisticRegressionSelector()
     # for t, tt in finder.steps.items():
     #     for p, pp in tt.items():
     #         pp.debug = True
     
     # finder.find(imgs[2])
-    # finder.accuracy(imgs, True)
+    ovw = cinput("Overwite? (y/n)", str, ynValidator) == 'y'
+    test = cinput("Test? (y/n)", str, ynValidator) == 'y'
+    finder.accuracy(imgs, ovw, test, True)
     # finder.speedBenchmark(imgs, 50, (720, 1280))
-    finder.speedBenchmark(imgs, 50, (480, 640))
+    # finder.speedBenchmark(imgs, 50, (480, 640))
     
     
     ib2 = ImageBrowserBehavior(imgs, finder)
