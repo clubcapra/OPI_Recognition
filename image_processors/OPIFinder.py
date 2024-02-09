@@ -1,13 +1,15 @@
+import json
 from typing import Any, Callable, Dict, List, Sequence, Tuple, Union
 
 import cv2
 from matplotlib import pyplot as plt
 import numpy as np
 from tqdm import tqdm
-from cinput import cinput
+from cinput import cinput, ynValidator
+from common import STATS_PATH, AccuracyStatsDict
 
 from image_processors.ImageProcessor import ImageProcessor
-from utils import debugScore
+from utils import calculate_metrics, debugMetrics, debugScore
 
 
 class OPIFinder:
@@ -28,6 +30,9 @@ class OPIFinder:
         for k in self.steps.keys():
             self.choices[k] = None
         
+        # Define a protocol to manage the values found in between steps
+        # This makes it possible to queue the steps while preserving their data
+        # This is especially useful for benchmarking each step individually
         # (passthrough, args)
         self.interStep:Dict[str,Callable[[List[Any], List[Any]], Tuple[List[Any], List[Any]]]] = {
             # input: ([None], [img])
@@ -76,7 +81,8 @@ class OPIFinder:
             # call (*[img, warps, rectAreas]) -> (scores, results)
             
             # input: ([img, cnts, rectAreas, trapezoids], [scores, results])
-            'selectShapes' : lambda p, args: (p, (p[0], args[0], args[1], p[3])),
+            'selectShapes' : lambda p, args: ((p[0], p[1], p[2], p[3], args[0], args[1]), (p[0], args[0], args[1], p[3])),
+            # output: ([img, cnts, rectAreas, trapezoids, scores, results], [img, warps, rectAreas])
         }
 
     def updateChoices(self):
@@ -155,6 +161,9 @@ class OPIFinder:
                     args = tuple([args])
                 if not isinstance(p, tuple):
                     p = tuple([p])
+                steps-=1
+                if steps <= 0:
+                    break
             yield (p, args)
         
         res = yielding(img, choices, steps)
@@ -240,7 +249,7 @@ class OPIFinder:
             'noBordersLighter',
             'topOCR',
             'bottomOCR',
-            # 'valid',
+            'valid',
         ]
         
         def load():
@@ -260,7 +269,7 @@ class OPIFinder:
             
             for i, img in enumerate(imgs):
                 if test:
-                    _, (ss, ww) = self.find2(img)
+                    (_, _, _, _, ss, ww), _ = self.find2(img)
                 if ww is None or ss is None:
                     continue
                 if 'valid' not in ss:
@@ -304,41 +313,56 @@ class OPIFinder:
             save(reorderedScores, reorderedExpected)
         else:
             scores = []
-            _, reorderedExpected = load()
-            if 'valid' not in reorderedExpected:
-                reorderedExpected['valid'] = np.zeros((len(reorderedExpected[names[0]])), np.float_)
-            for i, img in enumerate(imgs):
-                _, (ss, ww) = self.find2(img)
-                if ww is None or ss is None:
-                    continue
+            if not test:
+                reorderedScores, reorderedExpected = load()
+            else:
+                _, reorderedExpected = load()
                 
-                for s, w in zip(ss, ww):
-                    scores.append(s)
-                    if validity:
-                        cv2.imshow('valid', w)
-                        cv2.waitKey(100)
-                        v = cinput("Is this a valid image?", float)
-                        reorderedExpected['valid'][i] = v
-            reorderedScores = {}
-            for i, s in zip(range(len(scores)), scores):
-                for k, ss in zip(names, s.values()):
-                    if k not in reorderedScores.keys():
-                        reorderedScores[k] = np.zeros((len(scores)), np.float_)
-                    reorderedScores[k][i] = ss
+                if 'valid' not in reorderedExpected:
+                    reorderedExpected['valid'] = np.zeros((len(reorderedExpected[names[0]])), np.float_)
+                for i, img in tqdm(enumerate(imgs), "Processing images", len(imgs)):
+                    (_, _, _, _, ss, ww), _ = self.find2(img)
+                    if ww is None or ss is None or len(ww) == 0 or len(ss) == 0:
+                        continue
+                    
+                    for s, w in zip(ss, ww):
+                        scores.append(s)
+                        if validity:
+                            cv2.imshow('valid', w)
+                            cv2.waitKey(100)
+                            v = cinput("Is this a valid image?", float)
+                            reorderedExpected['valid'][i] = v
+                reorderedScores = {}
+                for i, s in zip(range(len(scores)), scores):
+                    for k, ss in zip(names, s.values()):
+                        if k not in reorderedScores.keys():
+                            reorderedScores[k] = np.zeros((len(scores)), np.float_)
+                        reorderedScores[k][i] = ss
         if validity:
             save(reorderedScores, reorderedExpected)
         
+        results: AccuracyStatsDict = {
+            'results' : {},
+            'scores' : {},
+            'expected' : {},
+        }
         
         for k, s, e in zip(reorderedScores.keys(), reorderedScores.values(), reorderedExpected.values()):
-            dbg = f"{k}:\n"
+            print(f"{k}:\n")
+            s:np.ndarray[np.float_]
+            e:np.ndarray[np.float_]
+            results['scores'][k] = s.tolist()
+            results['expected'][k] = e.tolist()
+            
             s = s>=0.5
             e = e>=0.5
-            truePos = (e == True) & (s == True)
-            falsePos = (e == False) & (s == True)
-            trueNeg = (e == False) & (s == False)
-            falseNeg = (e == True) & (s == False)
-            for name, val in [('true pos', truePos[e==True]), ('false neg', falseNeg[e==True]), ('true neg', trueNeg[e==False]), ('false pos', falsePos[e==False])]:
-                val = val.sum()
-                ratio = round(val / len(s) * 100, 1)
-                dbg += f"{name.ljust(9)}: {str(val).rjust(3)}/{str(len(s)).ljust(3)} {ratio}%\n"
-            print(dbg)
+            
+            results['results'][k] = debugMetrics(s, e)
+        yn = cinput("Save these factors? (y/n)", str, ynValidator) == 'y'
+        if yn:
+            statsFile = (STATS_PATH / 'accuracy.json')
+            statsFile.touch()
+            with statsFile.open('w') as wr:
+                json.dump(results, wr, indent=4)
+            print("DONE")
+            

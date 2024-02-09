@@ -1,16 +1,16 @@
-from typing import Any, Callable, Dict, List, Sequence, Tuple, Union
+import json
+from typing import List
 import cv2
 import numpy as np
-import matplotlib.pyplot as plt
-from tqdm import tqdm
 
 
 from cinput import cinput, ynValidator
-from common import CONVERTED_PATH, KEY_ESC, KEY_LEFT, KEY_RIGHT
-from image_processors import ImageProcessor, OPIFinder, contrasters, edge_detectors, edge_filters, normalizers, shape_identifiers, shape_postprocessors, shape_selectors, trapezoid_finders, trapezoid_rectifiers, thresholders
+from common import CONVERTED_PATH, KEY_ESC, KEY_LEFT, KEY_RIGHT, STATS_PATH, AccuracyStatsDict
+from image_processors import OPIFinder, contrasters, edge_detectors, edge_filters, normalizers, shape_identifiers, shape_postprocessors, shape_selectors, trapezoid_finders, trapezoid_rectifiers, thresholders
+from metadata import ImageBrowser
+from old_processing import filterThresh, final, noProcess, normalize, ocr, orangeness1, orangeness1Thresh, red, straighten
 
 from utils import convert, ensureExists
-
 
 class ImageBrowserBehavior:
     def __init__(self, imgs: List[cv2.Mat], behaviors:OPIFinder):
@@ -106,14 +106,27 @@ if __name__ == "__main__":
     finder.steps['scoreShapes']['simple'] = shape_identifiers.BasicShapeIdentifier(0.035, 0.04, redContraster)
     
     # finder.steps['selectShapes']['logistic'] = LogisticRegressionSelector()
+    
+    with (STATS_PATH / 'accuracy.json').open('r') as rd:
+        try:
+            results: AccuracyStatsDict = json.load(rd)
+            weights = {(k): v['f1_score'] for k, v in results['results'].items()}
+            finder.steps['selectShapes']['aggressive'] = shape_selectors.AggressiveLowFalsePos(0.1, weights, 0.1)
+            finder.steps['selectShapes']['aggressive'].debug = True
+            finder.steps['selectShapes']['aggressive'].calibrate(results, 0.5)
+            
+        except (AttributeError, KeyError):
+            finder.steps['selectShapes']['aggressive'] = shape_selectors.AggressiveLowFalsePos(0.2, 1, 0.1)
+            finder.steps['selectShapes']['aggressive'].debug = True
     # for t, tt in finder.steps.items():
     #     for p, pp in tt.items():
     #         pp.debug = True
     
     # finder.find(imgs[2])
     ovw = cinput("Overwite? (y/n)", str, ynValidator) == 'y'
-    test = cinput("Test? (y/n)", str, ynValidator) == 'y'
-    finder.accuracy(imgs, ovw, test, True)
+    test = cinput("Re-test the algorythm on the images? (y/n)", str, ynValidator) == 'y'
+    validity = cinput("Input validity? (y/n)", str, ynValidator) == 'y'
+    finder.accuracy(imgs, ovw, test, validity)
     # finder.speedBenchmark(imgs, 50, (720, 1280))
     # finder.speedBenchmark(imgs, 50, (480, 640))
     

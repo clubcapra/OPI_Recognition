@@ -1,2 +1,2 @@
-from ImageData import ImageData
-from ImageBrowser import ImageBrowser
+from .ImageData import ImageData
+from .ImageBrowser import ImageBrowser

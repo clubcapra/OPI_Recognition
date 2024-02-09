@@ -88,3 +88,39 @@ def debugScore(score:Dict[str,float], ndigits=2):
         color = Fore.GREEN if no != (v > 0.5) else Fore.RED
         s += f'{color}{v}{Fore.RESET}'
     print(s)
+    
+def calculate_metrics(tp, fn, tn, fp):
+    precision = tp / (tp + fp)
+    recall = tp / (tp + fn)
+    f1_score = 2 * (precision * recall) / (precision + recall)
+    return precision, recall, f1_score
+
+def debugMetrics(score:np.ndarray[np.bool_], expected:np.ndarray[np.bool_]):
+    dbg = ''
+    truePos = (expected == True) & (score == True)
+    falsePos = (expected == False) & (score == True)
+    trueNeg = (expected == False) & (score == False)
+    falseNeg = (expected == True) & (score == False)
+    metrics1 = {
+        'true_pos' : truePos[expected==True],
+        'false_neg' : falseNeg[expected==True],
+        'true_neg' : trueNeg[expected==False],
+        'false_pos' : falsePos[expected==False],
+    }
+    for name, val in metrics1.items():
+        val = val.sum()
+        ratio = val / len(score)
+        metrics1[name] = ratio
+        ratio = round(ratio * 100, 1)
+        dbg += f"{name.ljust(9)}: {str(val).rjust(3)}/{str(len(score)).ljust(3)} {ratio}%\n"
+    precision, recall, f1_score = calculate_metrics(truePos.sum(), falseNeg.sum(), trueNeg.sum(), falsePos.sum())
+    metrics2 = {
+        "precision": precision,
+        "recall": recall,
+        "f1_score": f1_score
+    }
+    for name, val in metrics2.items():
+        dbg += f"{name.ljust(9)}: {str(round(val, 3))}\n"
+    
+    print(dbg)
+    return { **metrics1, **metrics2 }
