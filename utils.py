@@ -1,5 +1,6 @@
 import os
 from pathlib import Path
+import shutil
 from typing import Dict, Tuple, Union
 from colorama import Fore
 import cv2
@@ -14,7 +15,7 @@ def ensureExists():
     cache = Path('cache.npy')
     cacheInit = Path('cache_start.npy')
     if not cache.exists():
-        cacheInit.rename(cache)
+        shutil.copyfile(str(cacheInit), str(cache))
 
 def convert():
     for p in SAMPLES_PATH.iterdir():

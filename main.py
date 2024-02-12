@@ -112,21 +112,22 @@ if __name__ == "__main__":
             results: AccuracyStatsDict = json.load(rd)
             weights = {(k): v['f1_score'] for k, v in results['results'].items()}
             finder.steps['selectShapes']['aggressive'] = shape_selectors.AggressiveLowFalsePos(0.1, weights, 0.1)
-            finder.steps['selectShapes']['aggressive'].debug = True
-            finder.steps['selectShapes']['aggressive'].calibrate(results, 0.5)
+            # finder.steps['selectShapes']['aggressive'].debug = True
+            vv = cinput("Calibration desired precision (defailt = 0.2): ]0 - 1]  ", float, lambda v: 0 < v <= 1)
+            finder.steps['selectShapes']['aggressive'].calibrate(results, vv)
             
         except (AttributeError, KeyError):
             finder.steps['selectShapes']['aggressive'] = shape_selectors.AggressiveLowFalsePos(0.2, 1, 0.1)
-            finder.steps['selectShapes']['aggressive'].debug = True
+            # finder.steps['selectShapes']['aggressive'].debug = True
     # for t, tt in finder.steps.items():
     #     for p, pp in tt.items():
     #         pp.debug = True
     
     # finder.find(imgs[2])
-    ovw = cinput("Overwite? (y/n)", str, ynValidator) == 'y'
-    test = cinput("Re-test the algorythm on the images? (y/n)", str, ynValidator) == 'y'
-    validity = cinput("Input validity? (y/n)", str, ynValidator) == 'y'
-    finder.accuracy(imgs, ovw, test, validity)
+    # ovw = cinput("Overwite? (y/n)", str, ynValidator) == 'y'
+    # test = cinput("Re-test the algorythm on the images? (y/n)", str, ynValidator) == 'y'
+    # validity = cinput("Input validity? (y/n)", str, ynValidator) == 'y'
+    # finder.accuracy(imgs, ovw, test, validity)
     # finder.speedBenchmark(imgs, 50, (720, 1280))
     # finder.speedBenchmark(imgs, 50, (480, 640))
     

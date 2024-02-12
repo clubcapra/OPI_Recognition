@@ -260,8 +260,10 @@ class OPIFinder:
                 rScores[k] = s
                 rExpected[k] = e
             return rScores, rExpected
+        if test:
+            factors = []
         
-        if overwrite:
+        if overwrite or validity:
             
             scores = []
             warps = []
@@ -269,12 +271,15 @@ class OPIFinder:
             
             for i, img in enumerate(imgs):
                 if test:
-                    (_, _, _, _, ss, ww), _ = self.find2(img)
+                    (_, _, _, _, ss, ww), (_, _, resScores) = self.find2(img)
+                    factors.append(resScores)
+                if not overwrite:
+                    _, reorderedExpected = load()
                 if ww is None or ss is None:
                     continue
-                if 'valid' not in ss:
-                    ss['valid'] = 0
-                for s, w in zip(ss, ww):
+                for ii, s, w in zip(range(len(ss)), ss, ww):
+                    if 'valid' not in s:
+                        s['valid'] = 0
                     scores.append(s)
                     warps.append(w)
                     exp = {}
@@ -283,12 +288,16 @@ class OPIFinder:
                     print("\n\n\n")
                     print("Result:")
                     debugScore(s)
-                    for k in s.keys():
-                        
-                        v = cinput(f"Enter expected result for {k}: ", float, 
-                                    parser=lambda x: (True, s[k]) if x == '' else (True, float(x)))
-                        exp[k] = v
-                    
+                    if overwrite:
+                        for k in s.keys():
+                            
+                            v = cinput(f"Enter expected result for {k}: ", float, 
+                                        parser=lambda x: (True, s[k]) if x == '' else (True, float(x)))
+                            exp[k] = v
+                    else:
+                        v = cinput(f"Is valid (0,1) [default: {reorderedExpected['valid'][i*4+ii]}]: ", float, 
+                                        parser=lambda x: (True, reorderedExpected['valid'][i*4+ii]) if x == '' else (True, float(x)))
+                        reorderedExpected['valid'][i*4+ii] = v
                         
                         
                         
@@ -302,7 +311,9 @@ class OPIFinder:
                     expected.append(exp)
                 
             reorderedScores = {}
-            reorderedExpected = {}
+            if overwrite:
+                reorderedExpected = {}
+                
             for i, s, e in zip(range(len(scores)), scores, expected):
                 for k, ss, ee in zip(s.keys(), s.values(), e.values()):
                     if k not in reorderedScores.keys():
@@ -321,7 +332,8 @@ class OPIFinder:
                 if 'valid' not in reorderedExpected:
                     reorderedExpected['valid'] = np.zeros((len(reorderedExpected[names[0]])), np.float_)
                 for i, img in tqdm(enumerate(imgs), "Processing images", len(imgs)):
-                    (_, _, _, _, ss, ww), _ = self.find2(img)
+                    (_, _, _, _, ss, ww), (_, _, resScores) = self.find2(img)
+                    factors.append(resScores)
                     if ww is None or ss is None or len(ww) == 0 or len(ss) == 0:
                         continue
                     
@@ -358,6 +370,23 @@ class OPIFinder:
             e = e>=0.5
             
             results['results'][k] = debugMetrics(s, e)
+        if test:
+            valids = np.array(results['expected']['valid'])
+            x1 = []
+            x2 = []
+            i = 0
+            for f in factors:
+                for ff in f:
+                    idx = i%4*4
+                    x2.append((valids[idx:idx+4] > 0).any())
+                    x1.append(ff)
+                    i += 1
+                    
+            plt.bar(np.arange(len(x1)), np.array(x1), 0.4)
+            plt.bar(np.arange(len(x1))+0.5, np.array(x2), 0.4)
+            plt.show()
+                
+        
         yn = cinput("Save these factors? (y/n)", str, ynValidator) == 'y'
         if yn:
             statsFile = (STATS_PATH / 'accuracy.json')

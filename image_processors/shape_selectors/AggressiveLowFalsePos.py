@@ -1,5 +1,6 @@
 
 
+from math import nan
 from numbers import Number
 from typing import Dict, List, Tuple, Union, overload
 from cv2 import Mat
@@ -27,7 +28,9 @@ class AggressiveLowFalsePos(ShapeSelector):
         if isinstance(self.weights, Number):
             self.weights: dict[str, float] = {k:self.weights for k in results['results'].keys()}
             
+        f = None
         def adjust(prec: float):
+            global f
             for parameterName, initial, scores, expected in zip(results['results'].keys(), self.initialThresholds.values(), results['scores'].values(), results['expected'].values()):
                     
                 if parameterName == 'valid':
@@ -51,7 +54,7 @@ class AggressiveLowFalsePos(ShapeSelector):
                 print(f"{k.ljust(18)}: weight: {str(round(w, 3)).ljust(5)} thresh: {str(round(t, 3)).ljust(5)}")
                 
             e = results['expected']['valid']
-            s = np.array(f) 
+            s = np.array(f)
         print(f"threshold: {round(self.threshold, 3)}")
                     
                 
@@ -65,25 +68,30 @@ class AggressiveLowFalsePos(ShapeSelector):
             
         if isinstance(self.weights, Number):
             self.weights: dict[str, float] = {k:self.weights for k in scores.keys()}
-        
+        s = 0
         for k, v in scores.items():
             if k == 'valid':
                 continue
+            if v == nan:
+                continue
+            if self.thresholds[k] == nan:
+                continue
+            if self.weights[k] == nan:
+                continue
+            s += self.weights[k]
             total += (v >= self.thresholds[k]) * self.weights[k]
             
-        return total / sum(self.weights.values())
+        return total / s
             
-    def __call__(self, img: Mat, scores: List[Dict[str, float]], warps: List[Mat], trapezoids: np.ndarray[np.float_]) -> Tuple[List[int], List[np.ndarray[np.float_]]]:
+    def __call__(self, img: Mat, scores: List[Dict[str, float]], warps: List[Mat], trapezoids: np.ndarray[np.float_]) -> Tuple[List[int], List[np.ndarray[np.float_]], List[float]]:
         indices: List[int] = []
         if scores is None or warps is None or trapezoids is None:
-            return [], []
+            return [], [], []
         res: List[np.ndarray[np.float_]] = []
-        if self.debug:
-            factors: List[float] = []
+        factors: List[float] = []
         for i, s in enumerate(scores):
             f = self.calculateFactor(s)
-            if self.debug:
-                factors.append(f)
+            factors.append(f)
             s['valid'] = f
             if f >= 0.5:
                 indices.append(i)
@@ -95,8 +103,8 @@ class AggressiveLowFalsePos(ShapeSelector):
         if self.debug:
             # plt.hist(f)
             # plt.show()
-            print(f)
+            print(factors)
                 
                 
-        return indices, res
+        return indices, res, factors
             

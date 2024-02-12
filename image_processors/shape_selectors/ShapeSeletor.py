@@ -8,7 +8,7 @@ class ShapeSelector(ImageProcessor):
     def __init__(self):
         super().__init__()
         
-    def __call__(self, img: cv2.Mat, scores:List[Dict[str, float]], warps:List[cv2.Mat], trapezoids:np.ndarray[np.float_]) -> Tuple[List[int], List[np.ndarray[np.float_]]]:
+    def __call__(self, img: cv2.Mat, scores:List[Dict[str, float]], warps:List[cv2.Mat], trapezoids:np.ndarray[np.float_]) -> Tuple[List[int], List[np.ndarray[np.float_]], List[float]]:
         """Classifies shapes
 
         Args:
@@ -18,6 +18,6 @@ class ShapeSelector(ImageProcessor):
             trapezoids (np.ndarray[np.float_]): Trapezoids on which data is based. Shape is (n, 4, 2)
 
         Returns:
-            Tuple[List[int], List[np.ndarray[np.float_]]]: (indices, selected trapezoids)
+            Tuple[List[int], List[np.ndarray[np.float_]], List[float]]: (indices, selected trapezoids, scores)
 
         """

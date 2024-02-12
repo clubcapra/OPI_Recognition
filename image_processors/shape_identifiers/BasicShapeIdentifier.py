@@ -119,7 +119,8 @@ class BasicShapeIdentifier(ShapeIdentifier):
         #         if b is not None:
         #             break
                     # cv2.imshow(f'test{i},{orientation},{ii}', s)
-                    print(f"Found [{i},{orientation},{ii}] '{txt}'")
+                    if self.debug:
+                        print(f"Found [{i},{orientation},{ii}] '{txt}'")
                 results.append(rotated)
                 scores.append(score)
         if self.debug:
