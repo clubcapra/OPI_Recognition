@@ -1,3 +1,5 @@
+import os
+from pathlib import Path
 from typing import Dict, Tuple, Union
 from colorama import Fore
 import cv2
@@ -8,6 +10,11 @@ from common import CONVERTED_PATH, PATHS, SAMPLES_PATH
 def ensureExists():
     for p in PATHS:
         p.mkdir(parents=True, exist_ok=True)
+    
+    cache = Path('cache.npy')
+    cacheInit = Path('cache_start.npy')
+    if not cache.exists():
+        cacheInit.rename(cache)
 
 def convert():
     for p in SAMPLES_PATH.iterdir():
