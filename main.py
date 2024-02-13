@@ -158,9 +158,31 @@ if __name__ == "__main__":
     # finder.speedBenchmark(imgs, 50, (720, 1280))
     # finder.speedBenchmark(imgs, 50, (480, 640))
     
+
+
+    """ Example for integration with ROS
+    
+    # Get image from ROS
+    img = ...
+    best = None
+    
+    _, (indices, trapezoids, scores) = finder.find2(img)
+    if len(trapezoids) > 0:
+        selectedScores = np.array([scores[i] for i in indices])
+        
+        bestIdx = np.where(selectedScores == selectedScores.max())
+        best = trapezoids[bestIdx]
+    
+    
+    # Send trapezoid to ROS if found
+        
+    
+    """
+
     
     
     ib2 = ImageBrowserBehavior(imgs, finder)
+
     
     while True:
         # ib.loop()
