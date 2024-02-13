@@ -1,15 +1,16 @@
 import json
+from numbers import Number
 from typing import Any, Callable, Dict, List, Sequence, Tuple, Union
 
 import cv2
 from matplotlib import pyplot as plt
 import numpy as np
 from tqdm import tqdm
-from cinput import cinput, ynValidator
+from cinput import cinput, intChoice, ynValidator
 from common import STATS_PATH, AccuracyStatsDict
 
 from image_processors.ImageProcessor import ImageProcessor
-from utils import calculate_metrics, debugMetrics, debugScore
+from utils import arrangeBars, calculate_metrics, debugMetrics, debugScore
 
 
 class OPIFinder:
@@ -234,7 +235,7 @@ class OPIFinder:
             plt.legend()
             plt.show()
             
-    def accuracy(self, imgs: Sequence[cv2.Mat], overwrite:bool, test:bool, validity:bool):
+    def accuracy(self, imgs: Sequence[cv2.Mat], overwrite:bool, test:bool, validity:bool, thresholds:Dict[str, float] = None):
         def save(rScores, rExpected):
             res = np.array([(s, e) for s, e in zip(rScores.values(), rExpected.values())])
             np.save("cache", res)
@@ -288,17 +289,69 @@ class OPIFinder:
                     print("\n\n\n")
                     print("Result:")
                     debugScore(s)
-                    if overwrite:
-                        for k in s.keys():
-                            
-                            v = cinput(f"Enter expected result for {k}: ", float, 
-                                        parser=lambda x: (True, s[k]) if x == '' else (True, float(x)))
-                            exp[k] = v
+                    options = [
+                        'valid',
+                        'invalid',
+                        'upsideDown',
+                    ]
+                    v, _ = intChoice(f"Is valid (0,1): ", options)
+                    if v == 0:
+                        if overwrite:
+                            for k in s.keys():
+                                
+                                v = cinput(f"Enter expected result for {k}: ", float, 
+                                            parser=lambda x: (True, s[k]) if x == '' else (True, float(x)))
+                                exp[k] = v
+                        else:
+                            v = cinput(f"Is valid (0,1) [default: {reorderedExpected['valid'][i*4+ii]}]: ", float, 
+                                            parser=lambda x: (True, reorderedExpected['valid'][i*4+ii]) if x == '' else (True, float(x)))
+                            reorderedExpected['valid'][i*4+ii] = v
                     else:
-                        v = cinput(f"Is valid (0,1) [default: {reorderedExpected['valid'][i*4+ii]}]: ", float, 
-                                        parser=lambda x: (True, reorderedExpected['valid'][i*4+ii]) if x == '' else (True, float(x)))
-                        reorderedExpected['valid'][i*4+ii] = v
+                        if v == 1:
+                            values = {
+                                'lineBorder' : 1,
+                                'noLineBorder' : 0,
+                                'topBottomBorders' : 1,
+                                'noTopBottomBorders' : 0,
+                                'bordersLighter' : 1,
+                                'noBordersLighter' : 0,
+                                'topOCR' : 2,
+                                'bottomOCR' : 4,
+                                'valid' : 1,
+                            }
+                        if v == 2:
+                            values = {
+                                'lineBorder' : 0,
+                                'noLineBorder' : 1,
+                                'topBottomBorders' : 0,
+                                'noTopBottomBorders' : 1,
+                                'bordersLighter' : 0,
+                                'noBordersLighter' : 1,
+                                'topOCR' : 0,
+                                'bottomOCR' : 0,
+                                'valid' : 0,
+                            }
+                        if v == 2:
+                            values = {
+                                'lineBorder' : 1,
+                                'noLineBorder' : 0,
+                                'topBottomBorders' : 1,
+                                'noTopBottomBorders' : 0,
+                                'bordersLighter' : 1,
+                                'noBordersLighter' : 0,
+                                'topOCR' : 0,
+                                'bottomOCR' : 0,
+                                'valid' : 0,
+                            }
+                    
+                        exp = values
                         
+                    # if overwrite:
+                    # else:
+                    #     for k, v in values.items():
+                    #         reorderedExpected[k][i*4+ii] = v
+                    
+
                         
                         
                     # while True:
@@ -366,24 +419,38 @@ class OPIFinder:
             results['scores'][k] = s.tolist()
             results['expected'][k] = e.tolist()
             
-            s = s>=0.5
-            e = e>=0.5
+            fac = 0.5
+            if thresholds is not None:
+                if isinstance(thresholds, Number):
+                    thresholds: dict[str, float] = {k:thresholds for k in names}
+                fac = thresholds[k]
+            
+            s = s>=fac
+            e = e>=fac
             
             results['results'][k] = debugMetrics(s, e)
         if test:
             valids = np.array(results['expected']['valid'])
-            x1 = []
-            x2 = []
+            scoreBars = []
+            validBars = []
             i = 0
             for f in factors:
                 for ff in f:
-                    idx = i%4*4
-                    x2.append((valids[idx:idx+4] > 0).any())
-                    x1.append(ff)
+                    if i % 4 == 0:
+                        idx = i//4
+                        validBars.append(1 if (valids[idx:idx+4] > 0).any() else 0)
+                    scoreBars.append(ff)
                     i += 1
                     
-            plt.bar(np.arange(len(x1)), np.array(x1), 0.4)
-            plt.bar(np.arange(len(x1))+0.5, np.array(x2), 0.4)
+            x = np.arange(len(scoreBars)//4)
+            # reshaped = np.array(validBars).reshape((-1, 4))
+            # valids = reshaped >= 0.5
+            ys = [validBars]
+            scoreBars = np.array(scoreBars)
+            for i in range(4):
+                ys.append(scoreBars[x + i])
+            
+            arrangeBars(x, *ys)
             plt.show()
                 
         

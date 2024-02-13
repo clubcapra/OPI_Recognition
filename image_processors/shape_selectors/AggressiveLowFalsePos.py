@@ -70,7 +70,7 @@ class AggressiveLowFalsePos(ShapeSelector):
             self.weights: dict[str, float] = {k:self.weights for k in scores.keys()}
         s = 0
         for k, v in scores.items():
-            if k == 'valid':
+            if k == 'valid' or 'OCR' in k:
                 continue
             if v == nan:
                 continue
@@ -79,7 +79,13 @@ class AggressiveLowFalsePos(ShapeSelector):
             if self.weights[k] == nan:
                 continue
             s += self.weights[k]
-            total += (v >= self.thresholds[k]) * self.weights[k]
+            ss = 1
+            if k.startswith('no'):
+                ss = -1
+            
+            total += (v >= self.thresholds[k]) * self.weights[k] * ss
+        total += 1 - (abs(2 - scores['topOCR']) / 2) * self.weights['topOCR']
+        total += 1 - (abs(4 - scores['bottomOCR']) / 4) * self.weights['bottomOCR']
             
         return total / s
             

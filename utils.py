@@ -1,9 +1,10 @@
 import os
 from pathlib import Path
 import shutil
-from typing import Dict, Tuple, Union
+from typing import Dict, Sequence, Tuple, Union
 from colorama import Fore
 import cv2
+from matplotlib import pyplot as plt
 import numpy as np
 from common import CONVERTED_PATH, PATHS, SAMPLES_PATH
 
@@ -132,3 +133,13 @@ def debugMetrics(score:np.ndarray[np.bool_], expected:np.ndarray[np.bool_]):
     
     print(dbg)
     return { **metrics1, **metrics2 }
+
+
+def arrangeBars(x:np.ndarray, *ys:np.ndarray):
+    spacing = 0.1
+    count = len(ys)
+    maxWidth = 1-spacing
+    width = maxWidth / count
+    for offset, y in zip(np.arange(0, maxWidth, width), ys):
+        plt.bar(x+offset, y, width)
+    

@@ -107,14 +107,40 @@ if __name__ == "__main__":
     
     # finder.steps['selectShapes']['logistic'] = LogisticRegressionSelector()
     
+    factors1 = {
+        'lineBorder' : 0.4,
+        'noLineBorder' : 0.2,
+        'topBottomBorders' : 0.1,
+        'noTopBottomBorders' : 0.1,
+        'bordersLighter' : 0.1,
+        'noBordersLighter' : 0.1,
+        'topOCR' : 0.5,
+        'bottomOCR' : 0.8,
+        'valid' : 1.51,
+    }
+    
+    factors2 = {
+        'lineBorder' : 0.5,
+        'noLineBorder' : 0.1,
+        'topBottomBorders' : 0.4,
+        'noTopBottomBorders' : 0.1,
+        'bordersLighter' : 0.2,
+        'noBordersLighter' : 0.1,
+        'topOCR' : 0.2,
+        'bottomOCR' : 0.4,
+        'valid' : 1.51,
+    }
+    
+    finder.steps['selectShapes']['hardCoded'] = shape_selectors.HardCodedSelector(factors2, 1.51)
+    finder.steps['selectShapes']['hardCoded'] = shape_selectors.HardCodedSelector(factors1, 1.51)
     with (STATS_PATH / 'accuracy.json').open('r') as rd:
         try:
             results: AccuracyStatsDict = json.load(rd)
             weights = {(k): v['f1_score'] for k, v in results['results'].items()}
-            finder.steps['selectShapes']['aggressive'] = shape_selectors.AggressiveLowFalsePos(0.1, weights, 0.1)
+            finder.steps['selectShapes']['aggressive'] = shape_selectors.AggressiveLowFalsePos(0.1, weights, 1.51)
             # finder.steps['selectShapes']['aggressive'].debug = True
-            vv = cinput("Calibration desired precision (defailt = 0.2): ]0 - 1]  ", float, lambda v: 0 < v <= 1)
-            finder.steps['selectShapes']['aggressive'].calibrate(results, vv)
+            # vv = cinput("Calibration desired precision (defailt = 0.2): ]0 - 1]  ", float, lambda v: 0 < v <= 1)
+            finder.steps['selectShapes']['aggressive'].calibrate(results, .5)
             
         except (AttributeError, KeyError):
             finder.steps['selectShapes']['aggressive'] = shape_selectors.AggressiveLowFalsePos(0.2, 1, 0.1)
@@ -127,9 +153,11 @@ if __name__ == "__main__":
     # ovw = cinput("Overwite? (y/n)", str, ynValidator) == 'y'
     # test = cinput("Re-test the algorythm on the images? (y/n)", str, ynValidator) == 'y'
     # validity = cinput("Input validity? (y/n)", str, ynValidator) == 'y'
-    # finder.accuracy(imgs, ovw, test, validity)
+    # finder.accuracy(imgs, ovw, test, validity, finder.steps['selectShapes']['aggressive'].thresholds)
+    finder.accuracy(imgs, False, True, False, finder.steps['selectShapes']['aggressive'].thresholds)
     # finder.speedBenchmark(imgs, 50, (720, 1280))
     # finder.speedBenchmark(imgs, 50, (480, 640))
+    
     
     
     ib2 = ImageBrowserBehavior(imgs, finder)
