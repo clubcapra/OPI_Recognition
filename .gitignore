@@ -1,3 +1,4 @@
 samples/
 venv
 __pycache__
+cache.npy
