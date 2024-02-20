@@ -132,8 +132,8 @@ if __name__ == "__main__":
         'valid' : 1.51,
     }
     
-    finder.steps['selectShapes']['hardCoded'] = shape_selectors.HardCodedSelector(factors2, 1.51)
-    finder.steps['selectShapes']['hardCoded'] = shape_selectors.HardCodedSelector(factors1, 1.51)
+    finder.steps['selectShapes']['hardCoded2'] = shape_selectors.HardCodedSelector(factors2, 1.51)
+    finder.steps['selectShapes']['hardCoded1'] = shape_selectors.HardCodedSelector(factors1, 1.51)
     with (STATS_PATH / 'accuracy.json').open('r') as rd:
         try:
             results: AccuracyStatsDict = json.load(rd)
