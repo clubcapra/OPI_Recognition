@@ -5,6 +5,11 @@ from image_processors.normalizers.Normalizer import Normalizer
 
 class Red(Contraster):
     def __init__(self, postNormalizer: Normalizer = None):
+        """Simple contraster that grabs the red channel and normalizes it.
+
+        Args:
+            postNormalizer (Normalizer, optional): Normalozer behavior to use after grabbing the red channel. Defaults to None.
+        """
         super().__init__()
         self.postNormalizer = postNormalizer
         

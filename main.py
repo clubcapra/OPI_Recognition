@@ -4,7 +4,7 @@ import cv2
 import numpy as np
 
 
-from cinput import cinput, ynValidator
+from cinput import cinput, intChoice, ynValidator
 from common import CONVERTED_PATH, KEY_ESC, KEY_LEFT, KEY_RIGHT, STATS_PATH, AccuracyStatsDict
 from image_processors import OPIFinder, contrasters, edge_detectors, edge_filters, normalizers, shape_identifiers, shape_postprocessors, shape_selectors, trapezoid_finders, trapezoid_rectifiers, thresholders
 from metadata import ImageBrowser
@@ -68,6 +68,7 @@ if __name__ == "__main__":
     
     imgs = [cv2.imread(str(p)) for p in CONVERTED_PATH.iterdir()]
     
+    # # Old processing
     # ib = ImageBrowser(imgs)
     # ib.processingMethods.append(noProcess)
     # ib.processingMethods.append(normalize)
@@ -95,9 +96,10 @@ if __name__ == "__main__":
     finder.steps['edgeFilter']['simple'] = edge_filters.SimpleEdgeFilter(0.008, 0.9, 0.001)
     
     finder.steps['postProcessShapes']['fillExpand'] = shape_postprocessors.FillPostProcess(finder.steps['edgeDetect']['simple'], finder.steps['edgeFilter']['simple'], 1.1)
-    finder.steps['postProcessShapes']['rectMerge'] = shape_postprocessors.RectMergePostProcess(finder.steps['edgeFilter']['simple'], 1.1)
+    finder.steps['postProcessShapes']['rectMerge'] = shape_postprocessors.RectMergePostProcess(1.1)
     
     finder.steps['findTrapezoids']['simple'] = trapezoid_finders.NearestContour()
+    finder.steps['findTrapezoids']['indexed'] = trapezoid_finders.IndexedNearestContour()
     
     finder.steps['rectifyTrapezoids']['simple'] = trapezoid_rectifiers.BasicRectify()
     
@@ -105,7 +107,6 @@ if __name__ == "__main__":
     
     finder.steps['scoreShapes']['simple'] = shape_identifiers.BasicShapeIdentifier(0.035, 0.04, redContraster)
     
-    # finder.steps['selectShapes']['logistic'] = LogisticRegressionSelector()
     
     factors1 = {
         'lineBorder' : 0.4,
@@ -150,13 +151,25 @@ if __name__ == "__main__":
     #         pp.debug = True
     
     # finder.find(imgs[2])
-    # ovw = cinput("Overwite? (y/n)", str, ynValidator) == 'y'
-    # test = cinput("Re-test the algorythm on the images? (y/n)", str, ynValidator) == 'y'
-    # validity = cinput("Input validity? (y/n)", str, ynValidator) == 'y'
-    # finder.accuracy(imgs, ovw, test, validity, finder.steps['selectShapes']['aggressive'].thresholds)
-    finder.accuracy(imgs, False, True, False, finder.steps['selectShapes']['aggressive'].thresholds)
-    # finder.speedBenchmark(imgs, 50, (720, 1280))
-    # finder.speedBenchmark(imgs, 50, (480, 640))
+    # finder.accuracy(imgs, False, True, False, finder.steps['selectShapes']['aggressive'].thresholds)
+    
+    def benchmarkAccuracy():
+        global finder
+        print("Benchmarking accuracy")
+        ovw = cinput("Overwrite cache? (y/n)", str, ynValidator) == 'y'
+        if not ovw:
+            test = cinput("Re-test the algorythm on the images (required to get stats)? (y/n)", str, ynValidator) == 'y'
+        else:
+            test = True
+        finder.accuracy(imgs, ovw, test, False, finder.steps['selectShapes']['aggressive'].thresholds)
+    
+    def benchmarkSpeedSmall():
+        print("Benchmarking speed at resolution: (480, 640)")
+        finder.speedBenchmark(imgs, 50, (480, 640))
+    
+    def benchmarkSpeedLarge():
+        print("Benchmarking speed at resolution: (720, 1280)")
+        finder.speedBenchmark(imgs, 50, (720, 1280))
     
 
 
@@ -179,7 +192,15 @@ if __name__ == "__main__":
     
     """
 
+    options = {
+        'Accuracy' : benchmarkAccuracy,
+        'Small speed' : benchmarkSpeedSmall,
+        'Large speed' : benchmarkSpeedLarge,
+    }
     
+    _, key = intChoice("Select a benchmark: ", options=list(options.keys()))
+    if key is not None:
+        options[key]()
     
     ib2 = ImageBrowserBehavior(imgs, finder)
 

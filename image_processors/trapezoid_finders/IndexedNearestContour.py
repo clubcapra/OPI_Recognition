@@ -5,9 +5,10 @@ import numpy as np
 from image_processors.trapezoid_finders.TrapezoidFinder import TrapezoidFinder
 
 
-class NearestContour(TrapezoidFinder):
+class IndexedNearestContour(TrapezoidFinder):
     def __init__(self):
         """Finds the trapezoids by getting the clossest valid contours from each rectangle's corners.
+        The main difference with NearestContour is that only contours used to create the rect will be used, reducing the amount of checks to perform.
         """
         super().__init__()
         
@@ -20,7 +21,7 @@ class NearestContour(TrapezoidFinder):
         trapezoids = []
         if boxes is None:
             return None
-        for b in boxes:
+        for b, c in zip(boxes, cnts):
             # Draw the rough outline
             if self.debug:
                 res = cv2.drawContours(img.copy(), [np.int_(b)], 0, (0,0,255),2)
@@ -31,7 +32,7 @@ class NearestContour(TrapezoidFinder):
             # Get the clossest contour point for each corner
             for i, corner in enumerate(b):
                 # Get all distances
-                m = np.linalg.norm(candidates[:] - corner, axis=1, keepdims=True)
+                m = np.linalg.norm(c - corner, axis=0, keepdims=True)
                 # Find minimum
                 idx = np.where(m == m.min())
                 # Grab minimum's contour coordinates

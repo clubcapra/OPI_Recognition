@@ -10,6 +10,13 @@ from image_processors.shape_selectors.ShapeSeletor import ShapeSelector
 
 class HardCodedSelector(ShapeSelector):
     def __init__(self, weights:Union[Dict[str, float], float], threshold: float):
+        """Hard-coded approach to apply weights to the scores.
+        Scores having the prefix 'no' will be subtracted from the final score.
+
+        Args:
+            weights (Union[Dict[str, float], float]): User defined weights. Must be compatible with the shape identifier's score names.
+            threshold (float): Final score threshold.
+        """
         super().__init__()
         self.weights = weights
         self.threshold = threshold

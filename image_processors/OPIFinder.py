@@ -174,7 +174,7 @@ class OPIFinder:
         
     
     
-    def speedBenchmark(self, imgs:Sequence[cv2.Mat], iterations:int, res:Tuple[int, int] = None):
+    def speedBenchmark(self, imgs:Sequence[cv2.Mat], iterations:int, res:Tuple[int, int] = None, choices:Union[Dict[str,str],Callable[[Dict[str,str]], Dict[str,str]]]=None):
         count = len(imgs)
         if res is not None:
             def resize(imgs: List[cv2.Mat]):
@@ -208,7 +208,7 @@ class OPIFinder:
             imgs = resize(imgs)
                     
                     
-        datas = list(list(self.find2(img, True)) for img in tqdm(imgs, "Grabbing data", count, unit='img'))
+        datas = list(list(self.find2(img, True, choices)) for img in tqdm(imgs, "Grabbing data", count, unit='img'))
         
         width = 1
         for s in self.steps.items():
@@ -235,8 +235,26 @@ class OPIFinder:
             plt.legend()
             plt.show()
             
-    def accuracy(self, imgs: Sequence[cv2.Mat], overwrite:bool, test:bool, validity:bool, thresholds:Dict[str, float] = None):
-        def save(rScores, rExpected):
+    def accuracy(self, imgs: Sequence[cv2.Mat], overwrite:bool, test:bool, validity:bool, thresholds:Dict[str, float] = None, choices: Dict[str, str] = None):
+        """Get stats on the accuracy of strategy.
+
+        Args:
+            imgs (Sequence[cv2.Mat]): Input images with length n.
+            overwrite (bool): Prompt user to enter new scores and overwrite cache.npy.
+            test (bool): Force process images.
+            validity (bool): ENter only validity and save to cache.npy.
+            thresholds (Dict[str, float], optional): Thresholds to use for checking scores. Defaults to None.
+            choices (Dict[str, str], optional): Behaviors to use for the stats. Defaults to None.
+        """
+        # This needs to be redesigned...
+        
+        def save(rScores: Dict[str, np.ndarray[np.float_]], rExpected: Dict[str, np.ndarray[np.float_]]):
+            """Save scores as an np array.
+
+            Args:
+                rScores (Dict[str, np.ndarray[np.float_]]): Reordered scores calculated in format { score name : score per warp }.
+                rExpected (Dict[str, np.ndarray[np.float_]]): Reordered scores expected in format { score name : score per warp }.
+            """
             res = np.array([(s, e) for s, e in zip(rScores.values(), rExpected.values())])
             np.save("cache", res)
             
@@ -253,10 +271,10 @@ class OPIFinder:
             'valid',
         ]
         
-        def load():
-            rScores = {}
-            rExpected = {}
-            ss = np.load("cache.npy")
+        def load() -> Tuple[Dict[str, np.ndarray[np.float_]], Dict[str, np.ndarray[np.float_]]]:
+            rScores: Dict[str, np.ndarray[np.float_]] = {}
+            rExpected: Dict[str, np.ndarray[np.float_]] = {}
+            ss: np.ndarray[np.float_] = np.load("cache.npy")
             for k, s, e in zip(names, ss[:,0], ss[:,1]):
                 rScores[k] = s
                 rExpected[k] = e
@@ -272,7 +290,11 @@ class OPIFinder:
             
             for i, img in enumerate(imgs):
                 if test:
-                    (_, _, _, _, ss, ww), (_, _, resScores) = self.find2(img)
+                    # output: ([img, cnts, rectAreas, trapezoids, scores, results], [img, warps, rectAreas])
+                    (_, _, _, _, ss, ww), (_, _, resScores) = self.find2(img, choices=choices)
+                    ss:Union[List[Dict[str, float]], None]
+                    ww:Union[List[Dict[str, float]], None]
+                    resScores:List[float]
                     factors.append(resScores)
                 if not overwrite:
                     _, reorderedExpected = load()
@@ -363,9 +385,9 @@ class OPIFinder:
                     debugScore(exp)
                     expected.append(exp)
                 
-            reorderedScores = {}
+            reorderedScores: Dict[str, np.ndarray[np.float_]] = {}
             if overwrite:
-                reorderedExpected = {}
+                reorderedExpected: Dict[str, np.ndarray[np.float_]] = {}
                 
             for i, s, e in zip(range(len(scores)), scores, expected):
                 for k, ss, ee in zip(s.keys(), s.values(), e.values()):
@@ -385,7 +407,10 @@ class OPIFinder:
                 if 'valid' not in reorderedExpected:
                     reorderedExpected['valid'] = np.zeros((len(reorderedExpected[names[0]])), np.float_)
                 for i, img in tqdm(enumerate(imgs), "Processing images", len(imgs)):
-                    (_, _, _, _, ss, ww), (_, _, resScores) = self.find2(img)
+                    (_, _, _, _, ss, ww), (_, _, resScores) = self.find2(img, choices=choices)
+                    ss:Union[List[Dict[str, float]], None]
+                    ww:Union[List[Dict[str, float]], None]
+                    resScores:List[float]
                     factors.append(resScores)
                     if ww is None or ss is None or len(ww) == 0 or len(ss) == 0:
                         continue
@@ -397,7 +422,7 @@ class OPIFinder:
                             cv2.waitKey(100)
                             v = cinput("Is this a valid image?", float)
                             reorderedExpected['valid'][i] = v
-                reorderedScores = {}
+                reorderedScores: Dict[str, np.ndarray[np.float_]] = {}
                 for i, s in zip(range(len(scores)), scores):
                     for k, ss in zip(names, s.values()):
                         if k not in reorderedScores.keys():

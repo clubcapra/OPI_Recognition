@@ -6,6 +6,8 @@ from image_processors.edge_detectors.EdgeDetector import EdgeDetector
 
 class SimpleEdgeDetect(EdgeDetector):
     def __init__(self):
+        """Base implementation of edge detection.
+        """
         super().__init__()
 
     def __call__(self, threshold:cv2.Mat) -> Sequence[cv2.Mat]:

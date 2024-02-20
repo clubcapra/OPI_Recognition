@@ -13,6 +13,13 @@ from prediction import adjustThresholdForPrecision
 
 class AggressiveLowFalsePos(ShapeSelector):
     def __init__(self, initialThresholds:Union[Dict[str, float], float], weights:Union[Dict[str, float], float], initialThreshold:float):
+        """Attempts to reduce the amount of false positives in the selected shapes.
+
+        Args:
+            initialThresholds (Union[Dict[str, float], float]): Dictionnary of the initial thresholds or the default value to be used at calibration.
+            weights (Union[Dict[str, float], float]): Dictionnary of the initial weights or the default value to use for each weight.
+            initialThreshold (float): Final initial threshold to categorize a positive result.
+        """
         super().__init__()
         self.initialThresholds = initialThresholds
         self.thresholds = initialThresholds
@@ -21,6 +28,12 @@ class AggressiveLowFalsePos(ShapeSelector):
         self.threshold = initialThreshold
         
     def calibrate(self, results:AccuracyStatsDict, desiredPrecision:float):
+        """Calibrate the thresholds and factors in an attempt to reach the desired precision.
+
+        Args:
+            results (AccuracyStatsDict): Calculated accuracy of a previous run.
+            desiredPrecision (float): Ratio of true positives.
+        """
         if isinstance(self.initialThresholds, Number):
             self.initialThresholds: dict[str, float] = {k:self.initialThresholds for k in results['results'].keys()}
             self.thresholds: dict[str, float] = self.initialThresholds
@@ -61,6 +74,14 @@ class AggressiveLowFalsePos(ShapeSelector):
                 
         
     def calculateFactor(self, scores: Dict[str, float]) -> float:
+        """Calculate the factor from scores.
+
+        Args:
+            scores (Dict[str, float]): Dictionnary of scores.
+
+        Returns:
+            float: Resulting score
+        """
         total = 0
         if isinstance(self.initialThresholds, Number):
             self.initialThresholds: dict[str, float] = {k:self.initialThresholds for k in scores.keys()}

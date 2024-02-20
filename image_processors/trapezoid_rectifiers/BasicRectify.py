@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Union
 import cv2
 import numpy as np
 from image_processors.trapezoid_rectifiers.TrapezoidRectifier import TrapezoidRectifier
@@ -6,9 +6,13 @@ from image_processors.trapezoid_rectifiers.TrapezoidRectifier import TrapezoidRe
 
 class BasicRectify(TrapezoidRectifier):
     def __init__(self):
+        """Base implementation for a TrapezoidRectifier.
+        Adapted from: https://pyimagesearch.com/2014/05/05/building-pokedex-python-opencv-perspective-warping-step-5-6/
+        """
         super().__init__()
         
-    def __call__(self, img: cv2.Mat, trapezoids:np.ndarray[np.float_]) -> List[cv2.Mat]:
+    def __call__(self, img: cv2.Mat, trapezoids:Union[np.ndarray[np.float_], None]) -> Union[List[cv2.Mat], None]:
+        
         if trapezoids is None:
             return None
         warps = []

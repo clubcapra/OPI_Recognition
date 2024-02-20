@@ -9,6 +9,22 @@ import pytesseract
 
 class BasicShapeIdentifier(ShapeIdentifier):
     def __init__(self, lineWidth:float, lineBorder:float, contraster: Contraster):
+        """Find and score the features of shapes.
+        Scores:
+            lineBorder: Increases if the center line's color is far from the border's color (higher is better).
+            noLineBorder: 1 if the center line's color is close from the border's increase score, otherwise, 0 (lower is better).
+            topBottomBorders: 1 if the top and botom borders are close, otherwise, 0 (higher is better).
+            noTopBottomBorders: Increases if the top and bottom borders differ (lower is better).
+            bordersLighter: 1 if borders are lighter than the center line, otherwise, 0 (higher is better).
+            noBordersLighter: 1 if center line is lighter than it's borders, otherwise, 0 (lower is better).
+            topOCR: Number of digits found in the top half of the warp (closer to 2 is better).
+            bottomOCR: Number of digits found in the bottom half of the warp (closer to 4 is better).
+
+        Args:
+            lineWidth (float): Relative width of the horizontal line found in an ERICard panel.
+            lineBorder (float): Relative area to explore around the the horizontal line.
+            contraster (Contraster): Contraster to use to pre-process the input warps.
+        """
         super().__init__()
         self.lineWidth = lineWidth
         self.lineBorder = lineBorder
@@ -23,7 +39,7 @@ class BasicShapeIdentifier(ShapeIdentifier):
         
         # Iterate over the warped (straightned) images
         for i, warp in enumerate(warps):
-            # Get the red channel normalized
+            # Get a contrasted version of the image
             contrast = self.contraster(warp)
             
             
@@ -103,22 +119,6 @@ class BasicShapeIdentifier(ShapeIdentifier):
                         continue
                     ocrCount+=1
 
-        #     # if not b.debug:
-        #     #     b.destroyWindow()
-        #     while True:
-        #         self.stepIndex = len(self.behaviors.choices) - 1 if self.stepIndex == 0 else self.stepIndex - 1
-        #         b = self.behaviors.getStepNumber(self.stepIndex)
-        #         if b is not None:
-        #             break
-        # if k == KEY_UP:
-        #     # if not b.debug:
-        #     #     b.destroyWindow()
-        #     while True:
-        #         self.stepIndex = (self.stepIndex + 1) % len(self.behaviors.choices)
-        #         b = self.behaviors.getStepNumber(self.stepIndex)
-        #         if b is not None:
-        #             break
-                    # cv2.imshow(f'test{i},{orientation},{ii}', s)
                     if self.debug:
                         print(f"Found [{i},{orientation},{ii}] '{txt}'")
                 results.append(rotated)

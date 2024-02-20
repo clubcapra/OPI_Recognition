@@ -4,8 +4,11 @@ import numpy as np
 from sklearn.linear_model import LogisticRegression
 from image_processors.shape_selectors.ShapeSeletor import ShapeSelector
 
-
 class LogisticRegressionSelector(ShapeSelector):
+    def __init__(self):
+        super().__init__()
+        raise NotImplementedError()
+    
     def __call__(self, img: cv2.Mat, scores: List[Dict[str, float]], warps: List[cv2.Mat], trapezoids: np.ndarray[np.float_]) -> Tuple[List[int], List[np.ndarray[np.float_]]]:
         if scores is None:
             return None, None
